@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bwmarrin/discordgo"
 	"github.com/fu-js/discord-bot/cmd/viblo/dtos"
 	"github.com/fu-js/discord-bot/pkg/utils/log"
-	"github.com/bwmarrin/discordgo"
 	"net/http"
 	"strings"
 	"time"
@@ -28,6 +28,7 @@ var colors = []int{
 type VibloService interface {
 	GetEditorChoices(limit int) ([]dtos.VibloPost, error)
 	GetTrending(limit int) ([]dtos.VibloPost, error)
+	SendMessage(session *discordgo.Session, channelID string, message string) error
 	SendPost(session *discordgo.Session, channelID string, posts []dtos.VibloPost) []error
 }
 
@@ -80,6 +81,18 @@ func (s *vibloService) GetTrending(limit int) ([]dtos.VibloPost, error) {
 	return data.Data, nil
 }
 
+func (s *vibloService) SendMessage(session *discordgo.Session, channelID string, message string) error {
+	if _, err := session.ChannelMessageSend(channelID, message); err != nil {
+		log.Zap.Errorw("error when send text msg to channel",
+			"error", err,
+			"channel_id", channelID,
+			"message", message,
+		)
+		return err
+	}
+	return nil
+}
+
 func (s *vibloService) SendPost(session *discordgo.Session, channelID string, posts []dtos.VibloPost) []error {
 	errs := make([]error, 0, len(posts))
 	for i, post := range posts {
@@ -124,7 +137,7 @@ func (s *vibloService) SendPost(session *discordgo.Session, channelID string, po
 				},
 			},
 		})
-		log.Zap.Infow("send message", "#", i, "error", err)
+		log.Zap.Infow("send message", "#", i, "channel_id", channelID, "error", err)
 		errs = append(errs, err)
 	}
 	return errs

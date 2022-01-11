@@ -1,8 +1,9 @@
 package bot
 
 import (
-	"github.com/fu-js/discord-bot/cmd/viblo/services"
+	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/fu-js/discord-bot/cmd/viblo/services"
 )
 
 type VibloBot interface {
@@ -34,6 +35,8 @@ func (b *vibloBot) PostTrending(channelID string, limit int) error {
 	if err != nil {
 		return err
 	}
+
+	b.vibloService.SendMessage(b.session, channelID, fmt.Sprintf("Top %v trending", limit))
 	b.vibloService.SendPost(b.session, channelID, trending)
 	return nil
 }
@@ -47,6 +50,7 @@ func (b *vibloBot) PostEditorChoice(channelID string, limit int) error {
 	if err != nil {
 		return err
 	}
+	b.vibloService.SendMessage(b.session, channelID, fmt.Sprintf("Top %v Editor choices", limit))
 	b.vibloService.SendPost(b.session, channelID, editorChoices)
 	return nil
 }
