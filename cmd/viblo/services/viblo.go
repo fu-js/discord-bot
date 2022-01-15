@@ -61,7 +61,10 @@ func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloPost, error) {
 		log.Zap.Errorw("error when call viblo editor choices api", "error", err)
 		return nil, err
 	}
-	if err := json.Unmarshal([]byte(tab.Body()), &data); err != nil {
+	time.Sleep(time.Second * 6)
+	body := tab.Body()
+	body = html.UnescapeString(body)
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
 		log.Zap.Errorw("error when decode viblo editor choices response", "error", err)
 		return nil, err
 	}
@@ -82,6 +85,7 @@ func (s *vibloService) GetTrending(limit int) ([]dtos.VibloPost, error) {
 		log.Zap.Errorw("error when call viblo trending api", "error", err)
 		return nil, err
 	}
+	time.Sleep(time.Second * 6)
 	body := tab.Body()
 	body = html.UnescapeString(body)
 	if err := json.Unmarshal([]byte(body), &data); err != nil {
