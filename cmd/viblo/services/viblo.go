@@ -7,6 +7,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/fu-js/discord-bot/cmd/viblo/dtos"
 	"github.com/fu-js/discord-bot/pkg/utils/log"
+	"github.com/headzoo/surf/browser"
+	"gopkg.in/headzoo/surf.v1"
+	"html"
 	"net/http"
 	"strings"
 	"time"
@@ -33,27 +36,32 @@ type VibloService interface {
 }
 
 type vibloService struct {
+	surf *browser.Browser
 }
 
 func NewVibloService() VibloService {
-	return &vibloService{}
+	b := surf.NewBrowser()
+
+	return &vibloService{
+		surf: b,
+	}
 }
 
 func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloPost, error) {
 	data := dtos.VibloPostResponse{}
+	tab := s.surf.NewTab()
+	tab.AddRequestHeader("Accept", "text/json")
+	tab.AddRequestHeader("Accept-Charset", "utf8")
 
-	resp, err := http.Get(fmt.Sprintf("https://viblo.asia/api/posts/editors-choice?limit=%v", limit))
-	if err != nil {
+	if err := tab.Open(fmt.Sprintf("https://viblo.asia/api/posts/editors-choice?limit=%v", limit)); err != nil {
+		return nil, err
+	}
+	if tab.StatusCode() != http.StatusOK {
+		err := errors.New(fmt.Sprintf("http request with non ok status: %v", tab.StatusCode()))
 		log.Zap.Errorw("error when call viblo editor choices api", "error", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		err := errors.New(fmt.Sprintf("http request with non ok status: %v", resp.StatusCode))
-		log.Zap.Errorw("error when call viblo editor choices api", "error", err)
-		return nil, err
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.Unmarshal([]byte(tab.Body()), &data); err != nil {
 		log.Zap.Errorw("error when decode viblo editor choices response", "error", err)
 		return nil, err
 	}
@@ -63,18 +71,20 @@ func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloPost, error) {
 func (s *vibloService) GetTrending(limit int) ([]dtos.VibloPost, error) {
 	data := dtos.VibloPostResponse{}
 
-	resp, err := http.Get(fmt.Sprintf("https://viblo.asia/api/posts/trending?limit=%v", limit))
-	if err != nil {
+	tab := s.surf.NewTab()
+
+	if err := tab.Open(fmt.Sprintf("https://viblo.asia/api/posts/trending?limit=%v", limit)); err != nil {
+		return nil, err
+	}
+
+	if tab.StatusCode() != http.StatusOK {
+		err := errors.New(fmt.Sprintf("http request with non ok status: %v", tab.StatusCode()))
 		log.Zap.Errorw("error when call viblo trending api", "error", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		err := errors.New(fmt.Sprintf("http request with non ok status: %v", resp.StatusCode))
-		log.Zap.Errorw("error when call viblo trending api", "error", err)
-		return nil, err
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	body := tab.Body()
+	body = html.UnescapeString(body)
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
 		log.Zap.Errorw("error when decode viblo trending response", "error", err)
 		return nil, err
 	}

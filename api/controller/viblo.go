@@ -30,7 +30,7 @@ func (v *vibloController) PublishNews(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
-	if err := v.bot.PostEditorChoice(req.ChannelID, req.Limit); err != nil {
+	if err := v.bot.PostTrending(req.ChannelID, req.Limit); err != nil {
 		return c.JSON(500, dtos.Response{
 			Message: err.Error(),
 		})
