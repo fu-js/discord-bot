@@ -1,4 +1,0 @@
-build:
-  docker:
-    web: deploy/Dockerfile
-
