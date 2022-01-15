@@ -1,14 +1,14 @@
 package services
 
 import (
-	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/fu-js/discord-bot/cmd/viblo/dtos"
 	"github.com/fu-js/discord-bot/pkg/utils/log"
+	"github.com/fu-js/discord-bot/pkg/utils/math"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -26,10 +26,10 @@ var colors = []int{
 }
 
 type VibloService interface {
-	GetEditorChoices(limit int) ([]dtos.VibloPost, error)
-	GetTrending(limit int) ([]dtos.VibloPost, error)
+	GetEditorChoices(limit int) ([]dtos.VibloRSSItem, error)
+	GetTrending(limit int) ([]dtos.VibloRSSItem, error)
 	SendMessage(session *discordgo.Session, channelID string, message string) error
-	SendPost(session *discordgo.Session, channelID string, posts []dtos.VibloPost) []error
+	SendPost(session *discordgo.Session, channelID string, posts []dtos.VibloRSSItem) []error
 }
 
 type vibloService struct {
@@ -39,12 +39,12 @@ func NewVibloService() VibloService {
 	return &vibloService{}
 }
 
-func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloPost, error) {
-	data := dtos.VibloPostResponse{}
+func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloRSSItem, error) {
+	data := dtos.VibloRSS{}
 
-	resp, err := http.Get(fmt.Sprintf("https://viblo.asia/api/posts/editors-choice?limit=%v", limit))
+	resp, err := http.Get("https://viblo.asia/rss/posts/editors-choice.rss")
 	if err != nil {
-		log.Zap.Errorw("error when call viblo editor choices api", "error", err)
+		log.Zap.Errorw("error when call viblo editor choices rss", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -53,19 +53,20 @@ func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloPost, error) {
 		log.Zap.Errorw("error when call viblo editor choices api", "error", err)
 		return nil, err
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := xml.NewDecoder(resp.Body).Decode(&data); err != nil {
 		log.Zap.Errorw("error when decode viblo editor choices response", "error", err)
 		return nil, err
 	}
-	return data.Data, nil
+	limit = math.MinInt(len(data.Channel.Item), limit)
+	return data.Channel.Item[:limit], nil
 }
 
-func (s *vibloService) GetTrending(limit int) ([]dtos.VibloPost, error) {
-	data := dtos.VibloPostResponse{}
+func (s *vibloService) GetTrending(limit int) ([]dtos.VibloRSSItem, error) {
+	data := dtos.VibloRSS{}
 
-	resp, err := http.Get(fmt.Sprintf("https://viblo.asia/api/posts/trending?limit=%v", limit))
+	resp, err := http.Get("https://viblo.asia/rss/posts/trending.rss")
 	if err != nil {
-		log.Zap.Errorw("error when call viblo trending api", "error", err)
+		log.Zap.Errorw("error when call viblo trending rss", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -74,11 +75,12 @@ func (s *vibloService) GetTrending(limit int) ([]dtos.VibloPost, error) {
 		log.Zap.Errorw("error when call viblo trending api", "error", err)
 		return nil, err
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := xml.NewDecoder(resp.Body).Decode(&data); err != nil {
 		log.Zap.Errorw("error when decode viblo trending response", "error", err)
 		return nil, err
 	}
-	return data.Data, nil
+	limit = math.MinInt(len(data.Channel.Item), limit)
+	return data.Channel.Item[:limit], nil
 }
 
 func (s *vibloService) SendMessage(session *discordgo.Session, channelID string, message string) error {
@@ -93,50 +95,29 @@ func (s *vibloService) SendMessage(session *discordgo.Session, channelID string,
 	return nil
 }
 
-func (s *vibloService) SendPost(session *discordgo.Session, channelID string, posts []dtos.VibloPost) []error {
+func (s *vibloService) SendPost(session *discordgo.Session, channelID string, posts []dtos.VibloRSSItem) []error {
 	errs := make([]error, 0, len(posts))
 	for i, post := range posts {
-		tags := make([]string, 0, len(post.Tags.Data))
-		for _, tag := range post.Tags.Data {
-			tags = append(tags, tag.Name)
-		}
-		_, err := session.ChannelMessageSendEmbed(channelID, &discordgo.MessageEmbed{
-			URL:       post.Url,
-			Type:      discordgo.EmbedTypeArticle,
-			Title:     post.Title,
-			Timestamp: time.Time(post.PublishedAt).Format(time.RFC3339),
-			Color:     colors[i%10],
-			Footer: &discordgo.MessageEmbedFooter{
-				Text: fmt.Sprintf("👀 %vm read time", post.ReadingTime),
-			},
-			Thumbnail: &discordgo.MessageEmbedThumbnail{
-				URL: post.ThumbnailUrl,
-			},
-			Video:    nil,
-			Provider: nil,
+		pubDate, _ := time.Parse("2006-01-02 15:04:05", post.PubDate)
+		msg := &discordgo.MessageEmbed{
+			URL:         post.Link,
+			Type:        discordgo.EmbedTypeArticle,
+			Title:       post.Title,
+			Timestamp:   pubDate.Format(time.RFC3339),
+			Color:       colors[i%10],
+			Description: post.Description,
 			Author: &discordgo.MessageEmbedAuthor{
-				URL:     post.User.Data.Url,
-				Name:    fmt.Sprintf("%v(%v)[%v🏆]", post.User.Data.Name, post.User.Data.Username, post.User.Data.Reputation),
-				IconURL: fmt.Sprintf("https://images.viblo.asia/avatar/%v", post.User.Data.Avatar),
+				Name: post.Creator.Text,
 			},
-			Fields: []*discordgo.MessageEmbedField{
-				{
-					Name:   "Point",
-					Value:  fmt.Sprint(post.Points),
-					Inline: true,
-				},
-				{
-					Name:   "View",
-					Value:  fmt.Sprint(post.ViewsCount),
-					Inline: true,
-				},
-				{
-					Name:   "Tags",
-					Value:  strings.Join(tags, ", "),
-					Inline: true,
-				},
-			},
-		})
+		}
+		if post.Category != "" {
+			msg.Fields = append(msg.Fields, &discordgo.MessageEmbedField{
+				Name:   "Category",
+				Value:  post.Category,
+				Inline: true,
+			})
+		}
+		_, err := session.ChannelMessageSendEmbed(channelID, msg)
 		log.Zap.Infow("send message", "#", i, "channel_id", channelID, "error", err)
 		errs = append(errs, err)
 	}
