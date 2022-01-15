@@ -7,6 +7,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/fu-js/discord-bot/cmd/viblo/dtos"
 	"github.com/fu-js/discord-bot/pkg/utils/log"
+	"github.com/headzoo/surf/agent"
 	"github.com/headzoo/surf/browser"
 	"gopkg.in/headzoo/surf.v1"
 	"html"
@@ -50,6 +51,8 @@ func NewVibloService() VibloService {
 func (s *vibloService) GetEditorChoices(limit int) ([]dtos.VibloPost, error) {
 	data := dtos.VibloPostResponse{}
 	tab := s.surf.NewTab()
+	tab.SetUserAgent(agent.Chrome())
+
 	tab.AddRequestHeader("Accept", "text/json")
 	tab.AddRequestHeader("Accept-Charset", "utf8")
 
@@ -75,6 +78,7 @@ func (s *vibloService) GetTrending(limit int) ([]dtos.VibloPost, error) {
 	data := dtos.VibloPostResponse{}
 
 	tab := s.surf.NewTab()
+	tab.SetUserAgent(agent.Chrome())
 
 	if err := tab.Open(fmt.Sprintf("https://viblo.asia/api/posts/trending?limit=%v", limit)); err != nil {
 		return nil, err
